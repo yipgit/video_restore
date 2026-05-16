@@ -223,9 +223,24 @@ class Enhancer:
             import torch
         except Exception as e:
             raise SystemExit(f"PyTorch is required for --method zerodce: {e}")
-        # This loader supports TorchScript or a plain state-dict with a user-supplied module later.
-        # For reliability, prefer exporting Zero-DCE/Zero-DCE++ to TorchScript once, then use it here.
-        model = torch.jit.load(weights, map_location=device)
+        if str(weights).endswith((".pt", ".torchscript")):
+            try:
+                model = torch.jit.load(weights, map_location=device)
+                model.eval().to(device)
+                return model
+            except Exception:
+                # Some projects use .pt for state_dict snapshots; try that next.
+                pass
+
+        from .zerodcepp import ZeroDCEPP
+
+        model = ZeroDCEPP(scale_factor=1)
+        state = torch.load(weights, map_location=device)
+        if isinstance(state, dict) and "state_dict" in state:
+            state = state["state_dict"]
+        if isinstance(state, dict):
+            state = {k.replace("module.", "", 1): v for k, v in state.items()}
+        model.load_state_dict(state, strict=True)
         model.eval().to(device)
         return model
 

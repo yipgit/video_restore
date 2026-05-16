@@ -29,20 +29,30 @@ python -m video_restore.main process input.mp4 --method curve --device cpu --out
 
 `--method mock` 是轻量调试模式，用来验证检测、分段、淡入淡出、合成流程，不依赖 GPU/模型。
 
-## GPU / Zero-DCE 路径
+## GPU / Zero-DCE++ 权重
 
-建议把 Zero-DCE/Zero-DCE++ 导出成 TorchScript：
+下载官方 Zero-DCE++ 权重：
+
+```bash
+mkdir -p models
+curl -L -o models/zerodcepp_epoch99.pth \
+  "https://raw.githubusercontent.com/Li-Chongyi/Zero-DCE_extension/main/Zero-DCE++/snapshots_Zero_DCE++/Epoch99.pth"
+```
+
+运行：
 
 ```bash
 python -m video_restore.main restore input.mp4 \
   --segments segments.json \
   --method zerodce \
-  --weights zerodce_torchscript.pt \
+  --weights models/zerodcepp_epoch99.pth \
   --device cuda \
   --out output.mp4
 ```
 
-如果使用 `--method auto --weights xxx.pt`，程序会在推荐为 `zerodce` 的片段上用模型，否则用曲线恢复。
+也支持 TorchScript 权重。如果使用 `--method auto --weights xxx.pth`，程序会在推荐为 `zerodce` 的片段上用模型，否则用曲线恢复。
+
+注意：官方 Zero-DCE++ 项目许可为 Attribution-NonCommercial 4.0 International，商用前需要确认授权。
 
 ## 输出 segments.json
 
