@@ -7,3 +7,7 @@ __pycache__/
 *.mkv
 *.avi
 segments.json
+models/
+*.pth
+*.pt
+*.onnx
