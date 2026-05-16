@@ -1,0 +1,5 @@
+# GPU/Zero-DCE optional dependencies.
+# Use Python 3.10-3.12. On a 3070 Linux/Windows CUDA machine, prefer the CUDA wheel index, e.g.:
+# pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+torch>=2.1
+torchvision>=0.16
