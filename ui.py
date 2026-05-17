@@ -93,6 +93,8 @@ class SyncImageView(QGraphicsView):
     def set_pixmap(self, pixmap: QPixmap) -> None:
         self.pixmap_item.setPixmap(pixmap)
         self.scene.setSceneRect(self.pixmap_item.boundingRect())
+        if pixmap.isNull():
+            return
         if self.scale_factor == 1.0:
             self.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
 
@@ -123,6 +125,9 @@ class MainWindow(QMainWindow):
         self.segments: list[dict[str, Any]] = []
         self.enhancer_cache: dict[tuple[Any, ...], Any] = {}
         self.syncing_views = False
+        self.segment_start_frame = 0
+        self.segment_end_frame = 0
+        self.video_fps = 0.0
 
         root = QWidget()
         self.setCentralWidget(root)
@@ -131,6 +136,7 @@ class MainWindow(QMainWindow):
         self.video_picker = PathPicker("视频", file_filter="Video files (*.mp4 *.mov *.mkv *.avi);;All files (*)")
         self.segments_picker = PathPicker("Segments", file_filter="JSON files (*.json);;All files (*)")
         self.out_picker = PathPicker("输出目录", directory=True)
+        self.video_picker.edit.editingFinished.connect(self.reconfigure_current_segment)
         default_out = str(Path.cwd() / "compare-ui")
         self.out_picker.setText(default_out)
 
@@ -217,6 +223,7 @@ class MainWindow(QMainWindow):
         for name, checked in [("original", True), ("curve", True), ("mock", False), ("zerodce", False), ("retinexformer", True)]:
             cb = QCheckBox(name)
             cb.setChecked(checked)
+            cb.toggled.connect(lambda _checked: self.preview_timer.start(100) if self.frame_slider.isEnabled() else None)
             self.method_checks[name] = cb
             methods_layout.addWidget(cb)
         form.addRow("methods", methods)
@@ -333,19 +340,31 @@ class MainWindow(QMainWindow):
             fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
             total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
             cap.release()
-            start_frame = max(0, int(float(seg.get("start", 0)) * fps))
-            end_frame = max(start_frame, int(float(seg.get("end", 0)) * fps))
+            start_frame = max(0, int(round(float(seg.get("start", 0)) * fps)))
+            end_frame = max(start_frame, int(round(float(seg.get("end", 0)) * fps)))
             if total:
                 end_frame = min(end_frame, max(0, total - 1))
+            self.segment_start_frame = start_frame
+            self.segment_end_frame = end_frame
+            self.video_fps = float(fps)
             self.frame_slider.blockSignals(True)
-            self.frame_slider.setRange(start_frame, end_frame)
-            self.frame_slider.setValue((start_frame + end_frame) // 2)
+            # Slider is deliberately segment-local: 0 means segment start,
+            # max means segment end. The absolute video frame is computed as
+            # segment_start_frame + slider.value().
+            self.frame_slider.setRange(0, max(0, end_frame - start_frame))
+            self.frame_slider.setValue(max(0, end_frame - start_frame) // 2)
             self.frame_slider.blockSignals(False)
             self.frame_slider.setEnabled(True)
             self.update_frame_label()
+            self.preview_timer.start(50)
         except Exception as e:
             self.frame_slider.setEnabled(False)
             self.frame_label.setText(f"frame: 初始化失败 {e}")
+
+    def reconfigure_current_segment(self) -> None:
+        idx = self.selected_index()
+        if idx is not None and idx < len(self.segments):
+            self.configure_frame_slider(self.segments[idx])
 
     def frame_slider_changed(self) -> None:
         self.update_frame_label()
@@ -353,19 +372,13 @@ class MainWindow(QMainWindow):
         self.preview_timer.start(250)
 
     def update_frame_label(self) -> None:
-        video = self.video_picker.text()
-        fps = 0.0
-        if video and Path(video).exists():
-            try:
-                import cv2  # type: ignore
-                cap = cv2.VideoCapture(video)
-                fps = cap.get(cv2.CAP_PROP_FPS) or 0.0
-                cap.release()
-            except Exception:
-                fps = 0.0
-        frame = self.frame_slider.value()
-        t = frame / fps if fps else 0.0
-        self.frame_label.setText(f"frame: {frame} / {t:.3f}s")
+        local = self.frame_slider.value()
+        frame = self.segment_start_frame + local
+        t = frame / self.video_fps if self.video_fps else 0.0
+        seg_t = local / self.video_fps if self.video_fps else 0.0
+        self.frame_label.setText(
+            f"seg frame: {local}/{self.frame_slider.maximum()} | video frame: {frame} | {t:.3f}s (+{seg_t:.3f}s)"
+        )
 
     def selected_segment_obj(self):
         idx = self.selected_index()
@@ -383,11 +396,13 @@ class MainWindow(QMainWindow):
         cap = cv2.VideoCapture(video)
         if not cap.isOpened():
             raise RuntimeError(f"Cannot open video: {video}")
-        cap.set(cv2.CAP_PROP_POS_FRAMES, self.frame_slider.value())
+        absolute_frame = self.segment_start_frame + self.frame_slider.value()
+        absolute_frame = min(max(self.segment_start_frame, absolute_frame), self.segment_end_frame)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, absolute_frame)
         ok, frame = cap.read()
         cap.release()
         if not ok:
-            raise RuntimeError(f"Cannot read frame: {self.frame_slider.value()}")
+            raise RuntimeError(f"Cannot read frame: {absolute_frame}")
         return frame
 
     def frame_to_pixmap(self, frame) -> QPixmap:
@@ -453,7 +468,8 @@ class MainWindow(QMainWindow):
                     enhancer = self.get_enhancer(name)
                     out = enhancer.apply(frame, target_y, seg.recommended_method)
                 view.set_pixmap(self.frame_to_pixmap(out))
-            self.append_log(f"updated frame preview: frame={self.frame_slider.value()}, methods={','.join(methods)}")
+            abs_frame = self.segment_start_frame + self.frame_slider.value()
+            self.append_log(f"updated frame preview: frame={abs_frame}, seg_offset={self.frame_slider.value()}, methods={','.join(methods)}")
         except Exception as e:
             self.error(f"单帧预览失败：{e}")
             self.append_log(f"frame preview failed: {e}")
