@@ -13,6 +13,13 @@ import webbrowser
 from pathlib import Path
 from typing import Any
 
+# Support both launch styles:
+#   1) from parent dir: python -m video_restore.ui
+#   2) from project dir / Windows double-click-ish: python ui.py
+PACKAGE_PARENT = Path(__file__).resolve().parents[1]
+if str(PACKAGE_PARENT) not in sys.path:
+    sys.path.insert(0, str(PACKAGE_PARENT))
+
 try:
     from PySide6.QtCore import QProcess, QTimer, Qt, Signal
     from PySide6.QtGui import QImage, QPixmap, QWheelEvent
@@ -384,7 +391,10 @@ class MainWindow(QMainWindow):
         idx = self.selected_index()
         if idx is None or idx >= len(self.segments):
             return None
-        from video_restore.main import Segment
+        try:
+            from video_restore.main import Segment
+        except ModuleNotFoundError:
+            from main import Segment  # type: ignore
         seg = self.segments[idx]
         return Segment(**seg)
 
@@ -413,7 +423,10 @@ class MainWindow(QMainWindow):
         return QPixmap.fromImage(image)
 
     def get_enhancer(self, method: str):
-        from video_restore.main import Enhancer, parse_int_list
+        try:
+            from video_restore.main import Enhancer, parse_int_list
+        except ModuleNotFoundError:
+            from main import Enhancer, parse_int_list  # type: ignore
         key = (
             method,
             self.zerodce_picker.text(),

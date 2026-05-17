@@ -325,7 +325,10 @@ class Enhancer:
                 # Some projects use .pt for state_dict snapshots; try that next.
                 pass
 
-        from .zerodcepp import ZeroDCEPP
+        try:
+            from .zerodcepp import ZeroDCEPP
+        except ImportError:
+            from zerodcepp import ZeroDCEPP  # type: ignore
 
         model = ZeroDCEPP(scale_factor=1)
         state = torch.load(weights, map_location=device)
@@ -352,7 +355,10 @@ class Enhancer:
         except Exception as e:
             raise SystemExit(f"PyTorch is required for --method retinexformer: {e}")
         try:
-            from .third_party.retinexformer_arch import RetinexFormer
+            try:
+                from .third_party.retinexformer_arch import RetinexFormer
+            except ImportError:
+                from third_party.retinexformer_arch import RetinexFormer  # type: ignore
         except ModuleNotFoundError as e:
             if e.name == "einops":
                 raise SystemExit(
