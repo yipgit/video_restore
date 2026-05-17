@@ -63,7 +63,31 @@ python -m video_restore.main process input.mp4 --out output.mp4 \
   --encoder h264_videotoolbox --bitrate 8M
 ```
 
-## 片段级对比 UI
+## Qt 对比应用
+
+安装 UI 依赖：
+
+```bash
+pip install -r video_restore/requirements-ui.txt
+```
+
+启动：
+
+```bash
+python -m video_restore.ui
+```
+
+MVP 功能：
+
+- 选择视频和 `segments.json`
+- 表格查看/选择 segment
+- 设置 padding、device、encoder、CRF 等参数
+- 勾选 `original` / `curve` / `mock` / `zerodce` / `retinexformer`
+- 填 ZeroDCE / Retinexformer 权重路径
+- 后台调用 `python -m video_restore.main compare ...`
+- 生成后自动用浏览器打开 `index.html` 对比页
+
+## 片段级 HTML 对比 UI
 
 先检测：
 
