@@ -353,8 +353,15 @@ class Enhancer:
             raise SystemExit(f"PyTorch is required for --method retinexformer: {e}")
         try:
             from .third_party.retinexformer_arch import RetinexFormer
+        except ModuleNotFoundError as e:
+            if e.name == "einops":
+                raise SystemExit(
+                    "Retinexformer requires einops. Install it with: "
+                    "pip install -r video_restore/requirements-gpu.txt or pip install einops"
+                ) from e
+            raise SystemExit(f"Cannot import bundled RetinexFormer architecture: {e}") from e
         except Exception as e:
-            raise SystemExit(f"Cannot import bundled RetinexFormer architecture: {e}")
+            raise SystemExit(f"Cannot import bundled RetinexFormer architecture: {e}") from e
 
         blocks = num_blocks or [1, 2, 2]
         model = RetinexFormer(in_channels=3, out_channels=3, n_feat=n_feat, stage=stage, num_blocks=blocks)
