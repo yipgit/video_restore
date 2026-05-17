@@ -43,6 +43,7 @@ try:
         QPlainTextEdit,
         QSlider,
         QSpinBox,
+        QTabWidget,
         QTableWidget,
         QTableWidgetItem,
         QVBoxLayout,
@@ -138,7 +139,17 @@ class MainWindow(QMainWindow):
 
         root = QWidget()
         self.setCentralWidget(root)
-        layout = QGridLayout(root)
+        root_layout = QVBoxLayout(root)
+        self.tabs = QTabWidget()
+        root_layout.addWidget(self.tabs)
+
+        project_tab = QWidget()
+        project_layout = QGridLayout(project_tab)
+        self.tabs.addTab(project_tab, "1. 文件 / Segments")
+
+        preview_tab = QWidget()
+        preview_layout = QGridLayout(preview_tab)
+        self.tabs.addTab(preview_tab, "2. 单帧预览 / 模型参数")
 
         self.video_picker = PathPicker("视频", file_filter="Video files (*.mp4 *.mov *.mkv *.avi);;All files (*)")
         self.segments_picker = PathPicker("Segments", file_filter="JSON files (*.json);;All files (*)")
@@ -157,14 +168,14 @@ class MainWindow(QMainWindow):
         top.addWidget(self.load_button)
         top_box = QGroupBox("项目")
         top_box.setLayout(top)
-        layout.addWidget(top_box, 0, 0, 1, 2)
+        project_layout.addWidget(top_box, 0, 0)
 
         self.table = QTableWidget(0, 8)
         self.table.setHorizontalHeaderLabels(["#", "start", "end", "dur", "conf", "source_y", "target_y", "method"])
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.table.itemSelectionChanged.connect(self.update_selected_label)
-        layout.addWidget(self.table, 1, 0, 1, 1)
+        project_layout.addWidget(self.table, 1, 0)
 
         frame_box = QGroupBox("单帧预览 / 图片对比")
         frame_layout = QVBoxLayout(frame_box)
@@ -199,7 +210,7 @@ class MainWindow(QMainWindow):
             box_layout.addWidget(view)
             self.image_grid.addWidget(box, i // 2, i % 2)
         frame_layout.addLayout(self.image_grid)
-        layout.addWidget(frame_box, 2, 0, 2, 1)
+        preview_layout.addWidget(frame_box, 0, 0, 2, 1)
 
         options_box = QGroupBox("对比设置")
         form = QFormLayout(options_box)
@@ -263,16 +274,18 @@ class MainWindow(QMainWindow):
         buttons.addWidget(self.run_button)
         buttons.addWidget(self.open_button)
         form.addRow(buttons)
-        layout.addWidget(options_box, 1, 1)
+        preview_layout.addWidget(options_box, 0, 1)
 
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
         self.log.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        layout.addWidget(self.log, 2, 1, 2, 1)
+        preview_layout.addWidget(self.log, 1, 1)
 
-        layout.setColumnStretch(0, 4)
-        layout.setColumnStretch(1, 2)
-        layout.setRowStretch(3, 1)
+        project_layout.setColumnStretch(0, 1)
+        project_layout.setRowStretch(1, 1)
+        preview_layout.setColumnStretch(0, 4)
+        preview_layout.setColumnStretch(1, 2)
+        preview_layout.setRowStretch(1, 1)
 
     def append_log(self, text: str) -> None:
         self.log.appendPlainText(text.rstrip())
@@ -331,6 +344,8 @@ class MainWindow(QMainWindow):
         seg = self.segments[idx]
         self.selected_label.setText(f"#{idx}: {seg.get('start')} → {seg.get('end')}")
         self.configure_frame_slider(seg)
+        if self.tabs.currentIndex() == 0:
+            self.tabs.setTabText(1, f"2. 预览 #{idx}")
 
     def selected_methods(self) -> list[str]:
         return [name for name, cb in self.method_checks.items() if cb.isChecked()]
